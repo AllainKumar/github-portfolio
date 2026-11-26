@@ -12,6 +12,21 @@ navLinks.querySelectorAll('a').forEach(a =>
   a.addEventListener('click', () => navLinks.classList.remove('open'))
 );
 
+// ===== Projects dropdown (click/tap toggle; hover handled in CSS) =====
+const dropdown = document.getElementById('projectsDropdown');
+const dropdownToggle = document.getElementById('dropdownToggle');
+dropdownToggle.addEventListener('click', e => {
+  e.stopPropagation();
+  const open = dropdown.classList.toggle('open');
+  dropdownToggle.setAttribute('aria-expanded', open);
+});
+document.addEventListener('click', e => {
+  if (!dropdown.contains(e.target)) {
+    dropdown.classList.remove('open');
+    dropdownToggle.setAttribute('aria-expanded', false);
+  }
+});
+
 // ===== Typed effect =====
 const roles = [
   'Computer Science Student',
@@ -54,7 +69,7 @@ function animateCount(el) {
 
 // ===== Scroll reveal + counter trigger =====
 document.querySelectorAll(
-  '.about-grid, .stats, .skills-grid, .timeline-item, .edu-card, .cert-card, .contact-card, .section-title'
+  '.about-grid, .stats, .skills-grid, .timeline-item, .edu-card, .project-card, .cert-card, .contact-card, .section-title'
 ).forEach(el => el.classList.add('reveal'));
 
 const observer = new IntersectionObserver(entries => {
