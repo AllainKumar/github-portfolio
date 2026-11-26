@@ -166,78 +166,89 @@ if (window.gsap && window.ScrollTrigger) {
     });
     pinTrigger = tween.scrollTrigger;
 
-    // hero entrance
-    gsap.from('.hero-text > *', { y: 40, autoAlpha: 0, duration: .9, stagger: .08, ease: 'power3.out' });
-    gsap.from('.img-frame', { scale: .85, autoAlpha: 0, duration: 1.1, ease: 'power3.out', delay: .2 });
-
-    // the star keeps flying around the screen leaving a trail of fading copies;
-    // scrolling pushes it along its path, spins it faster and makes it grow
-    const copyStar = cls => {
-      const el = star.cloneNode(true);
-      el.removeAttribute('id');
-      el.setAttribute('class', cls);
-      starLayer.insertBefore(el, star);
-      return el;
-    };
-    const ghosts = Array.from({ length: TRAIL }, () => copyStar('ghost'));
-    // two tiny stars that circle and chase the main one
-    const minis = [0, 1].map(i => ({
-      el: copyStar('mini'), x: innerWidth / 2, y: innerHeight / 2,
-      follow: i ? .05 : .08, orbit: i ? 95 : 70, phase: i * Math.PI, dir: i ? -1 : 1
-    }));
-    const s = { x: innerWidth / 2, y: innerHeight / 2, angle: 0, scale: 0, speed: 0, lastY: scrollY, intro: 0 };
-    const history = [];
-    gsap.to(s, { intro: 1, duration: 1.4, ease: 'back.out(1.6)', delay: .3 });
-    const place = (el, x, y, angle, scale) => {
-      el.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg) scale(${scale})`;
-    };
-    function flyStar(time, dt) {
-      const w = innerWidth, h = innerHeight;
-      const p = pinTrigger ? pinTrigger.progress : 0;
-      const f = Math.min(dt / 16.7, 3); // keep speeds the same at any frame rate
-      s.speed += ((scrollY - s.lastY) / Math.max(dt, 1) * 1000 - s.speed) * .15;
-      s.lastY = scrollY;
-      const tx = w * .5 + w * .4 * Math.sin(time * .8 + p * 9);
-      const ty = h * .55 + h * .3 * Math.sin(time * 1.15 + p * 13) * Math.cos(time * .37 + p * 4);
-      s.x += (tx - s.x) * .07 * f;
-      s.y += (ty - s.y) * .07 * f;
-      s.angle += (1.2 + Math.abs(s.speed) * .004) * f;
-      s.scale += (s.intro * (1 + Math.min(Math.abs(s.speed) / 2500, .9)) - s.scale) * .12;
-      place(star, s.x, s.y, s.angle, s.scale);
-
-      history.unshift([s.x, s.y, s.angle, s.scale]);
-      history.length = Math.min(history.length, TRAIL * 4 + 1);
-      ghosts.forEach((g, i) => {
-        const [x, y, angle, scale] = history[Math.min((i + 1) * 4, history.length - 1)];
-        const k = 1 - (i + 1) / (TRAIL + 1);
-        place(g, x, y, angle, scale * (.35 + .55 * k));
-        g.style.opacity = (k * .5).toFixed(3);
-      });
-
-      minis.forEach(m => {
-        const a = time * 2.4 * m.dir + m.phase;
-        m.x += (s.x + Math.cos(a) * m.orbit * s.scale - m.x) * m.follow * f;
-        m.y += (s.y + Math.sin(a) * m.orbit * s.scale - m.y) * m.follow * f;
-        place(m.el, m.x, m.y, -s.angle * 2, s.scale * .22);
-      });
-    }
-    gsap.ticker.add(flyStar);
-
     return () => {
       ScrollTrigger.removeEventListener('refreshInit', fitPanels);
-      gsap.ticker.remove(flyStar);
-      ghosts.forEach(g => g.remove());
-      minis.forEach(m => m.el.remove());
       document.body.classList.remove('hs', 'hs-moved', 'hs-past');
       panels.forEach(p => { p.querySelector('.container').style.zoom = ''; });
       pinTrigger = null;
     };
   });
 
+  // mobile keeps the normal vertical page; the dots follow whichever section is mid-screen
+  function updateMobileDot() {
+    if (pinTrigger) return;
+    let i = 0;
+    panels.forEach((p, j) => { if (p.getBoundingClientRect().top <= innerHeight / 2) i = j; });
+    setActiveDot(i);
+  }
+  window.addEventListener('scroll', updateMobileDot, { passive: true });
+  updateMobileDot();
+
+  // hero entrance
+  gsap.from('.hero-text > *', { y: 40, autoAlpha: 0, duration: .9, stagger: .08, ease: 'power3.out' });
+  gsap.from('.img-frame', { scale: .85, autoAlpha: 0, duration: 1.1, ease: 'power3.out', delay: .2 });
+
+  // the star keeps flying around the screen leaving a trail of fading copies;
+  // scrolling pushes it along its path, spins it faster and makes it grow
+  const copyStar = cls => {
+    const el = star.cloneNode(true);
+    el.removeAttribute('id');
+    el.setAttribute('class', cls);
+    starLayer.insertBefore(el, star);
+    return el;
+  };
+  const ghosts = Array.from({ length: TRAIL }, () => copyStar('ghost'));
+  // two tiny stars that circle and chase the main one
+  const minis = [0, 1].map(i => ({
+    el: copyStar('mini'), x: innerWidth / 2, y: innerHeight / 2,
+    follow: i ? .05 : .08, orbit: i ? 95 : 70, phase: i * Math.PI, dir: i ? -1 : 1
+  }));
+  const s = { x: innerWidth / 2, y: innerHeight / 2, angle: 0, scale: 0, speed: 0, lastY: scrollY, intro: 0 };
+  const trail = [];
+  gsap.to(s, { intro: 1, duration: 1.4, ease: 'back.out(1.6)', delay: .3 });
+  const place = (el, x, y, angle, scale) => {
+    el.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg) scale(${scale})`;
+  };
+  function flyStar(time, dt) {
+    const w = innerWidth, h = innerHeight;
+    const small = w <= 800; // the star is drawn smaller on phones (see style.css)
+    const max = document.documentElement.scrollHeight - h;
+    const p = pinTrigger ? pinTrigger.progress : (max > 0 ? scrollY / max : 0);
+    const f = Math.min(dt / 16.7, 3); // keep speeds the same at any frame rate
+    s.speed += ((scrollY - s.lastY) / Math.max(dt, 1) * 1000 - s.speed) * .15;
+    s.lastY = scrollY;
+    const tx = w * .5 + w * (small ? .34 : .4) * Math.sin(time * .8 + p * 9);
+    const ty = h * .55 + h * .3 * Math.sin(time * 1.15 + p * 13) * Math.cos(time * .37 + p * 4);
+    s.x += (tx - s.x) * .07 * f;
+    s.y += (ty - s.y) * .07 * f;
+    s.angle += (1.2 + Math.abs(s.speed) * .004) * f;
+    s.scale += (s.intro * (1 + Math.min(Math.abs(s.speed) / 2500, .9)) - s.scale) * .12;
+    place(star, s.x, s.y, s.angle, s.scale);
+
+    trail.unshift([s.x, s.y, s.angle, s.scale]);
+    trail.length = Math.min(trail.length, TRAIL * 4 + 1);
+    ghosts.forEach((g, i) => {
+      const [x, y, angle, scale] = trail[Math.min((i + 1) * 4, trail.length - 1)];
+      const k = 1 - (i + 1) / (TRAIL + 1);
+      place(g, x, y, angle, scale * (.35 + .55 * k));
+      g.style.opacity = (k * .5).toFixed(3);
+    });
+
+    minis.forEach(m => {
+      const a = time * 2.4 * m.dir + m.phase;
+      const r = m.orbit * s.scale * (small ? .65 : 1);
+      m.x += (s.x + Math.cos(a) * r - m.x) * m.follow * f;
+      m.y += (s.y + Math.sin(a) * r - m.y) * m.follow * f;
+      place(m.el, m.x, m.y, -s.angle * 2, s.scale * .22);
+    });
+  }
+  gsap.ticker.add(flyStar);
+
   // in-page links scroll to the matching point along the track
   function scrollToPanel(hash, behavior = 'smooth') {
     const panel = hash && document.querySelector(hash);
-    if (!pinTrigger || !panel || panel.parentElement !== track) return false;
+    if (!panel || panel.parentElement !== track) return false;
+    if (!pinTrigger) { panel.scrollIntoView({ behavior }); return true; }
     const offset = panel.offsetLeft - (window.innerWidth - panel.offsetWidth) / 2;
     window.scrollTo({ top: pinTrigger.start + Math.min(Math.max(offset, 0), distance()), behavior });
     return true;
