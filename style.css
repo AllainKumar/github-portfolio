@@ -272,8 +272,8 @@ body.hs .reveal { transition: opacity .8s ease, transform .8s cubic-bezier(.2, .
 body.hs .reveal:not(.visible) { transform: translateX(80px); filter: blur(6px); }
 
 /* red four-point star that flies around the screen (moved by script.js) */
-.scroll-hint { display: none; }
-.star-layer {
+.star-layer, .dots, .scroll-hint { display: none; }
+body.hs .star-layer {
   display: block; position: fixed; inset: 0; z-index: 90; pointer-events: none;
   mix-blend-mode: difference; /* text under the star changes colour */
   transition: opacity .4s, visibility .4s;
@@ -285,26 +285,20 @@ body.hs .reveal:not(.visible) { transform: translateX(80px); filter: blur(6px); 
 .star-layer .star { filter: drop-shadow(0 0 16px rgba(225, 29, 46, .75)); }
 .star-layer .mini { filter: drop-shadow(0 0 30px rgba(225, 29, 46, .9)); }
 
-/* progress dots: a slim column on the right edge (phones), a bar at the bottom (desktop) */
-.dots {
-  display: flex; flex-direction: column; align-items: center; gap: 7px;
-  position: fixed; right: 6px; top: 50%; transform: translateY(-50%); z-index: 50;
-  padding: 8px 5px; border-radius: 999px;
+/* progress dots */
+body.hs .dots {
+  display: flex; align-items: center; gap: 10px;
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 50;
+  padding: 9px 14px; border-radius: 999px;
   background: rgba(0, 0, 0, .7); border: 1px solid var(--accent-dim);
   transition: opacity .4s, visibility .4s;
 }
 .dots button {
-  width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
-  background: rgba(229, 229, 229, .25); transition: width .35s, height .35s, background .35s;
+  width: 9px; height: 9px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(229, 229, 229, .25); transition: width .35s, background .35s;
 }
 .dots button:hover { background: rgba(229, 229, 229, .6); }
-.dots button.active { height: 20px; background: var(--accent); }
-body.hs .dots {
-  flex-direction: row; gap: 10px; right: auto; top: auto; left: 50%; bottom: 22px;
-  transform: translateX(-50%); padding: 9px 14px;
-}
-body.hs .dots button { width: 9px; height: 9px; }
-body.hs .dots button.active { width: 28px; }
+.dots button.active { width: 28px; background: var(--accent); }
 body.hs-past .star-layer, body.hs-past .dots { opacity: 0; visibility: hidden; }
 
 /* scroll hint on the first screen */
@@ -338,6 +332,13 @@ body.hs-moved .scroll-hint { opacity: 0; }
   .about-grid { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .star-layer svg { width: 70px; height: 70px; margin: -35px 0 0 -35px; }
+  /* sections taller than the screen start at the top and scroll up inside their panel (script.js) */
+  body.hs .hscroll, body.hs .track > * { height: 100vh; height: 100svh; }
+  body.hs .track > section { padding: 84px 0 76px; }
+  body.hs .track > .hero { padding-bottom: 76px; }
+  body.hs .track > .tall { align-items: flex-start; }
+  body.hs .scroll-hint { bottom: 60px; }
+  body.hs .scroll-hint .mouse { display: none; }
 
   .hamburger { display: flex; }
   .nav-links {

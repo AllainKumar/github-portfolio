@@ -123,6 +123,9 @@ if (window.gsap && window.ScrollTrigger) {
   const TRAIL = 10;
   const dots = document.getElementById('dots');
   let pinTrigger = null;
+  let panelAt = i => i / (panels.length - 1); // scroll progress where section i is in view
+  let rebuild = null;
+  let activeIndex = 0;
 
   // one progress dot per section
   const dotBtns = panels.map(panel => {
@@ -136,6 +139,7 @@ if (window.gsap && window.ScrollTrigger) {
     return btn;
   });
   function setActiveDot(i) {
+    activeIndex = i;
     dotBtns.forEach((b, j) => b.classList.toggle('active', i === j));
   }
 
@@ -165,6 +169,7 @@ if (window.gsap && window.ScrollTrigger) {
       }
     });
     pinTrigger = tween.scrollTrigger;
+    panelAt = i => i / (panels.length - 1);
 
     return () => {
       ScrollTrigger.removeEventListener('refreshInit', fitPanels);
@@ -174,15 +179,85 @@ if (window.gsap && window.ScrollTrigger) {
     };
   });
 
-  // mobile keeps the normal vertical page; the dots follow whichever section is mid-screen
-  function updateMobileDot() {
-    if (pinTrigger) return;
-    let i = 0;
-    panels.forEach((p, j) => { if (p.getBoundingClientRect().top <= innerHeight / 2) i = j; });
-    setActiveDot(i);
-  }
-  window.addEventListener('scroll', updateMobileDot, { passive: true });
-  updateMobileDot();
+  // phones get the same sideways travel, but a section taller than the screen
+  // first scrolls up inside its panel before the next one slides in
+  gsap.matchMedia().add('(max-width: 800px)', () => {
+    document.body.classList.add('hs');
+    let tl = null, moves = [], lastWidth = innerWidth;
+    const boxes = panels.map(p => p.querySelector('.container'));
+
+    function build() {
+      const current = tl ? activeIndex : 0;
+      if (tl) { tl.scrollTrigger.kill(true); tl.kill(); }
+      gsap.set(track, { x: 0 });
+      gsap.set(boxes, { y: 0 });
+      tl = gsap.timeline({ defaults: { ease: 'none' } });
+      moves = [];
+      const marks = [];
+      // timeline durations are in pixels, so scroll length matches the distance travelled
+      panels.forEach((panel, i) => {
+        const cs = getComputedStyle(panel);
+        const over = boxes[i].offsetHeight - (panel.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+        panel.classList.toggle('tall', over > 0);
+        marks.push(tl.duration());
+        if (over > 0) tl.to(boxes[i], { y: -over, duration: over });
+        const next = panels[i + 1];
+        if (next) {
+          moves.push([tl.duration(), tl.duration() + next.offsetWidth]);
+          tl.to(track, { x: -next.offsetLeft, duration: next.offsetWidth });
+        }
+      });
+      const total = tl.duration();
+      pinTrigger = ScrollTrigger.create({
+        animation: tl,
+        trigger: hscroll,
+        pin: true,
+        scrub: 1,
+        end: '+=' + total,
+        // only snap while a section is part-way through sliding in
+        snap: {
+          snapTo: v => {
+            const t = v * total;
+            const m = moves.find(([a, b]) => t > a && t < b);
+            return m ? (t - m[0] < m[1] - t ? m[0] : m[1]) / total : v;
+          },
+          inertia: false, duration: { min: .25, max: .7 }, delay: .05, ease: 'power2.inOut'
+        },
+        onUpdate: self => {
+          const t = self.progress * total;
+          setActiveDot(moves.filter(([a, b]) => t >= (a + b) / 2).length);
+          document.body.classList.toggle('hs-moved', self.progress > .02);
+        },
+        onLeave: () => document.body.classList.add('hs-past'),
+        onEnterBack: () => document.body.classList.remove('hs-past')
+      });
+      panelAt = i => marks[i] / total;
+      if (current) { pinTrigger.refresh(); scrollToPanel('#' + panels[current].id, 'instant'); }
+    }
+    build();
+    setActiveDot(0);
+    rebuild = build;
+
+    // rebuild when the width changes (rotation), not when the address bar hides
+    const onResize = () => {
+      if (innerWidth === lastWidth) return;
+      lastWidth = innerWidth;
+      build();
+    };
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      tl.scrollTrigger.kill(true);
+      tl.kill();
+      gsap.set(track, { clearProps: 'transform' });
+      gsap.set(boxes, { clearProps: 'transform' });
+      panels.forEach(p => p.classList.remove('tall'));
+      document.body.classList.remove('hs', 'hs-moved', 'hs-past');
+      rebuild = null;
+      pinTrigger = null;
+    };
+  });
 
   // hero entrance
   gsap.from('.hero-text > *', { y: 40, autoAlpha: 0, duration: .9, stagger: .08, ease: 'power3.out' });
@@ -203,9 +278,12 @@ if (window.gsap && window.ScrollTrigger) {
     el: copyStar('mini'), x: innerWidth / 2, y: innerHeight / 2,
     follow: i ? .05 : .08, orbit: i ? 95 : 70, phase: i * Math.PI, dir: i ? -1 : 1
   }));
-  const s = { x: innerWidth / 2, y: innerHeight / 2, angle: 0, scale: 0, speed: 0, lastY: scrollY, intro: 0 };
+  const s = { x: innerWidth / 2, y: innerHeight / 2, angle: 0, scale: 0, speed: 0, lastY: scrollY, intro: 0, clock: 0, energy: 0, touching: false };
   const trail = [];
   gsap.to(s, { intro: 1, duration: 1.4, ease: 'back.out(1.6)', delay: .3 });
+  // the star only flies while the screen is touched (or mouse held) or the page is scrolling
+  ['touchstart', 'pointerdown'].forEach(e => addEventListener(e, () => { s.touching = true; }, { passive: true }));
+  ['touchend', 'touchcancel', 'pointerup'].forEach(e => addEventListener(e, () => { s.touching = false; }, { passive: true }));
   const place = (el, x, y, angle, scale) => {
     el.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg) scale(${scale})`;
   };
@@ -215,13 +293,18 @@ if (window.gsap && window.ScrollTrigger) {
     const max = document.documentElement.scrollHeight - h;
     const p = pinTrigger ? pinTrigger.progress : (max > 0 ? scrollY / max : 0);
     const f = Math.min(dt / 16.7, 3); // keep speeds the same at any frame rate
+    const active = s.touching || scrollY !== s.lastY;
     s.speed += ((scrollY - s.lastY) / Math.max(dt, 1) * 1000 - s.speed) * .15;
     s.lastY = scrollY;
-    const tx = w * .5 + w * (small ? .34 : .4) * Math.sin(time * .8 + p * 9);
-    const ty = h * .55 + h * .3 * Math.sin(time * 1.15 + p * 13) * Math.cos(time * .37 + p * 4);
+    // energy ramps up quickly when active and fades out gently, so the star glides to a stop
+    s.energy += ((active ? 1 : 0) - s.energy) * (active ? .2 : .05) * f;
+    s.clock += dt / 1000 * s.energy;
+    const c = s.clock;
+    const tx = w * .5 + w * (small ? .34 : .4) * Math.sin(c * .8 + p * 9);
+    const ty = h * .55 + h * .3 * Math.sin(c * 1.15 + p * 13) * Math.cos(c * .37 + p * 4);
     s.x += (tx - s.x) * .07 * f;
     s.y += (ty - s.y) * .07 * f;
-    s.angle += (1.2 + Math.abs(s.speed) * .004) * f;
+    s.angle += (.3 + .9 * s.energy + Math.abs(s.speed) * .004) * f; // always spins slowly, faster when active
     s.scale += (s.intro * (1 + Math.min(Math.abs(s.speed) / 2500, .9)) - s.scale) * .12;
     place(star, s.x, s.y, s.angle, s.scale);
 
@@ -235,7 +318,7 @@ if (window.gsap && window.ScrollTrigger) {
     });
 
     minis.forEach(m => {
-      const a = time * 2.4 * m.dir + m.phase;
+      const a = c * 2.4 * m.dir + m.phase;
       const r = m.orbit * s.scale * (small ? .65 : 1);
       m.x += (s.x + Math.cos(a) * r - m.x) * m.follow * f;
       m.y += (s.y + Math.sin(a) * r - m.y) * m.follow * f;
@@ -247,10 +330,9 @@ if (window.gsap && window.ScrollTrigger) {
   // in-page links scroll to the matching point along the track
   function scrollToPanel(hash, behavior = 'smooth') {
     const panel = hash && document.querySelector(hash);
-    if (!panel || panel.parentElement !== track) return false;
-    if (!pinTrigger) { panel.scrollIntoView({ behavior }); return true; }
-    const offset = panel.offsetLeft - (window.innerWidth - panel.offsetWidth) / 2;
-    window.scrollTo({ top: pinTrigger.start + Math.min(Math.max(offset, 0), distance()), behavior });
+    if (!pinTrigger || !panel || panel.parentElement !== track) return false;
+    const at = panelAt(panels.indexOf(panel));
+    window.scrollTo({ top: pinTrigger.start + at * (pinTrigger.end - pinTrigger.start), behavior });
     return true;
   }
   document.querySelectorAll('a[href^="#"]').forEach(a => {
@@ -263,7 +345,10 @@ if (window.gsap && window.ScrollTrigger) {
     });
   });
 
+  // section heights change once the web fonts and images arrive
+  window.addEventListener('load', () => { if (rebuild) rebuild(); ScrollTrigger.refresh(); });
   document.fonts.ready.then(() => {
+    if (rebuild) rebuild();
     ScrollTrigger.refresh();
     if (location.hash) scrollToPanel(location.hash, 'instant');
   });
